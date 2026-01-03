@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //
 
+import os.log
+
 public extension SMCComm {
     @MainActor
     enum Power {
@@ -23,18 +25,27 @@ public extension SMCComm {
             // Ensure all required SMC keys are present and well-formed.
             //
             let chargeKey = self.chargeKeys.firstIndex { key in
-                SMCComm.keySupported(keyInfo: key.keyInfo)
+                let supported = SMCComm.keySupported(keyInfo: key.keyInfo)
+                if !supported {
+                    SMCComm.logKeyMismatch(keyInfo: key.keyInfo)
+                }
+                return supported
             }
             guard let chargeKey = chargeKey else {
+                os_log("No supported charging control keys found")
                 return false;
             }
             self.chargeKey = chargeKey
-            
-            
+
             let adapterKey = self.adapterKeys.firstIndex { key in
-                SMCComm.keySupported(keyInfo: key.keyInfo)
+                let supported = SMCComm.keySupported(keyInfo: key.keyInfo)
+                if !supported {
+                    SMCComm.logKeyMismatch(keyInfo: key.keyInfo)
+                }
+                return supported
             }
             guard let adapterKey = adapterKey else {
+                os_log("No supported adapter control keys found")
                 return false;
             }
             self.adapterKey = adapterKey

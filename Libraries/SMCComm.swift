@@ -69,13 +69,29 @@ public extension SMCComm {
         static let hex  = SMCComm.KeyType("h", "e", "x", "_")
     }
     
+    //
+    // SMC attribute bits:
+    // Bit 2: Readable
+    // Bit 4: Writable
+    //
+    private static let kSMCKeyAttributeRead: UInt8 = 1 << 2
+    private static let kSMCKeyAttributeWrite: UInt8 = 1 << 4
+
     static func KeyInfoDataEq (
         data1: SMCComm.KeyInfoData,
         data2: SMCComm.KeyInfoData
     ) -> Bool {
+        //
+        // Validate size and type exactly, but only require that the expected
+        // read/write attributes are present. Apple may change other attribute
+        // bits across firmware versions while keeping the key functional.
+        //
+        let requiredAttrs = data2.dataAttributes & (kSMCKeyAttributeRead | kSMCKeyAttributeWrite)
+        let actualAttrs = data1.dataAttributes & (kSMCKeyAttributeRead | kSMCKeyAttributeWrite)
+
         return data1.dataSize == data2.dataSize &&
             data1.dataType == data2.dataType &&
-            data1.dataAttributes == data2.dataAttributes
+            (actualAttrs & requiredAttrs) == requiredAttrs
     }
 }
 
@@ -156,11 +172,34 @@ public enum SMCComm {
     static func keySupported(keyInfo: SMCComm.KeyInfo) -> Bool {
         let info = SMCComm.getKeyInfo(key: keyInfo.key)
         guard let info = info,
-              SMCComm.KeyInfoDataEq(data1: keyInfo.info, data2: info) else {
+              SMCComm.KeyInfoDataEq(data1: info, data2: keyInfo.info) else {
             return false
         }
-        
+
         return true
+    }
+
+    static func logKeyMismatch(keyInfo: SMCComm.KeyInfo) {
+        let keyBytes = BytesFromUInt32(keyInfo.key)
+        let keyName = String(format: "%c%c%c%c",
+                             keyBytes.0, keyBytes.1, keyBytes.2, keyBytes.3)
+
+        let info = SMCComm.getKeyInfo(key: keyInfo.key)
+        if let info = info {
+            let expectedType = BytesFromUInt32(keyInfo.info.dataType)
+            let actualType = BytesFromUInt32(info.dataType)
+            os_log("""
+                SMC key \(keyName) mismatch - \
+                expected: size=\(keyInfo.info.dataSize), \
+                type=\(String(format: "%c%c%c%c", expectedType.0, expectedType.1, expectedType.2, expectedType.3)), \
+                attrs=0x\(String(format: "%02X", keyInfo.info.dataAttributes)); \
+                actual: size=\(info.dataSize), \
+                type=\(String(format: "%c%c%c%c", actualType.0, actualType.1, actualType.2, actualType.3)), \
+                attrs=0x\(String(format: "%02X", info.dataAttributes))
+                """)
+        } else {
+            os_log("SMC key \(keyName) not found")
+        }
     }
 
     static func readKey(key: SMCComm.Key, dataSize: Int) -> [UInt8]? {
