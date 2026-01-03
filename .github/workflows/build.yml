@@ -1,0 +1,44 @@
+name: Build Battery Toolkit
+
+on:
+  push:
+    branches: [ "main", "master", "claude/*" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Select Xcode
+      run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+
+    - name: Build
+      run: |
+        xcodebuild -project "Battery Toolkit.xcodeproj" \
+          -scheme "Battery Toolkit" \
+          -configuration Release \
+          -derivedDataPath build \
+          -arch arm64 \
+          CODE_SIGN_IDENTITY="-" \
+          CODE_SIGNING_REQUIRED=NO \
+          CODE_SIGNING_ALLOWED=NO
+
+    - name: Prepare artifact
+      run: |
+        mkdir -p artifact
+        cp -R "build/Build/Products/Release/Battery Toolkit.app" artifact/
+        cd artifact
+        zip -r "Battery-Toolkit.zip" "Battery Toolkit.app"
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Battery-Toolkit
+        path: artifact/Battery-Toolkit.zip
+        retention-days: 90
